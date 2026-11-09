@@ -1,10 +1,14 @@
 package server
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"sort"
+	"strconv"
 
 	"github.com/abjelosevic88/pocket-homelab-rooms/internal/store"
 )
@@ -331,6 +335,25 @@ func cleanSteps(in []store.RouteStep) ([]store.RouteStep, error) {
 		}
 	}
 	return out, nil
+}
+
+// handleFitQuery is the same check from the address (for Pocket AI and
+// Shortcuts): piece_id or width/depth/height, with route_id or one door
+// (door_width, door_height, turn = the hallway it is entered from).
+func (s *Server) handleFitQuery(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	f := func(k string) float64 { v, _ := strconv.ParseFloat(q.Get(k), 64); return v }
+	in := map[string]any{"piece_id": int64(f("piece_id")), "width": f("width"), "depth": f("depth"), "height": f("height"), "route_id": int64(f("route_id"))}
+	if q.Has("hands") {
+		in["hands"] = f("hands")
+	}
+	if f("door_width") > 0 {
+		in["steps"] = []store.RouteStep{{Kind: "door", Name: "The door", Width: f("door_width"), Height: f("door_height"), Turn: f("turn")}}
+	}
+	b, _ := json.Marshal(in)
+	r2 := r.Clone(r.Context())
+	r2.Body = io.NopCloser(bytes.NewReader(b))
+	s.handleFit(w, r2)
 }
 
 // handleFit checks a size (or a piece) against steps (or a saved route).

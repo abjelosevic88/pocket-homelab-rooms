@@ -63,6 +63,10 @@ func TestEverythingIsPerPerson(t *testing.T) {
 	a.expect(404, a.bob, "POST", "/api/v1/fit", map[string]any{"piece_id": n(ids["piece"]), "steps": []map[string]any{{"kind": "door", "width": 80}}})
 	a.expect(404, a.bob, "POST", "/api/v1/fit", map[string]any{"width": 10, "depth": 10, "height": 10, "route_id": n(ids["route"])})
 	a.expect(404, a.bob, "POST", "/api/v1/todos", map[string]any{"plan_id": n(ids["plan"]), "title": "spy"})
+	a.expect(404, a.bob, "GET", "/api/v1/fit?piece_id="+ids["piece"]+"&door_width=80", nil)
+	if m := a.ok(a.alice, "GET", "/api/v1/fit?piece_id="+ids["piece"]+"&door_width=80&door_height=200", nil); m["result"].(map[string]any)["ok"] != false {
+		t.Fatalf("a 95 × 85 sofa end through an 80 cm door: %v", m)
+	}
 	if d := a.ok(a.alice, "GET", "/api/v1/plans/"+ids["plan"], nil); d["plan"].(map[string]any)["name"] != "Our flat" {
 		t.Fatalf("alice's plan: %v", d)
 	}
@@ -144,6 +148,10 @@ func TestWillItFit(t *testing.T) {
 	}
 	if r := checkFit(150, 50, 60, []store.RouteStep{corner}, 0, "metric"); !r.OK {
 		t.Fatalf("a 1.5 m piece did not turn a 1 m corner: %+v", r)
+	}
+	// round a corner, tilted up: a 200 × 40 × 40 board does not swing flat round a 70 / 70 corner but goes tilted
+	if r := checkFit(200, 40, 40, []store.RouteStep{{Kind: "corner", Width: 70, Turn: 70, Height: 250}}, 0, "metric"); !r.OK {
+		t.Fatalf("a board did not tilt round a corner: %+v", r)
 	}
 	// a lift: a 230 cm piece stands up in a 210 cm lift? no; lies across the diagonal of 100 × 130 (164)? no
 	lift := store.RouteStep{Kind: "lift", Width: 100, Depth: 130, Height: 210}
@@ -248,6 +256,7 @@ func TestLinkScopes(t *testing.T) {
 		{read, r("GET", "/api/v1/plans/3/summary"), true},
 		{read, r("GET", "/api/v1/layouts/3"), true},
 		{read, r("POST", "/api/v1/fit"), true},
+		{read, r("GET", "/api/v1/fit"), true},
 		{read, r("GET", "/api/v1/day/2026-11-13"), true},
 		{read, r("POST", "/api/v1/pieces"), false},
 		{read, r("GET", "/api/v1/settings"), false},

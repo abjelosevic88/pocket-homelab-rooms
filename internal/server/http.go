@@ -119,6 +119,7 @@ func (s *Server) Router() http.Handler {
 				r.Post("/pieces/{id}/wish", s.handlePieceWish)
 				r.Post("/pieces/{id}/bought", s.handlePieceBought)
 				r.Post("/fit", s.handleFit)
+				r.Get("/fit", s.handleFitQuery)
 
 				// the other Pocket apps
 				r.Get("/apps", s.handleApps)
