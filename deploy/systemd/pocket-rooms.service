@@ -1,0 +1,23 @@
+[Unit]
+Description=Pocket Rooms — tabletop role-playing games (5E)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pocket-rooms
+Group=pocket-rooms
+ExecStart=/usr/local/bin/pocket-rooms
+Environment=DATA_DIR=/var/lib/pocket-rooms
+Environment=PORT=8080
+Environment=BASE_URL=https://rooms.example.com
+Environment=SECURE_COOKIES=true
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/pocket-rooms
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
