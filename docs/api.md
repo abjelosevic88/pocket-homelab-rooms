@@ -81,3 +81,5 @@ Events on the Core bus: `rooms.plan_created`, `rooms.layout_saved` (at most ever
 ## Data
 
 `GET /export.json` (`?photos=0` without pictures, `?plan=ID` one plan) · `GET /export.csv?what=furniture|rooms` · `POST /import` (a Pocket Rooms export — again and again, nothing is doubled — or a Sweet Home 3D `.sh3d` file / its `Home.xml`, which becomes a new plan) · `GET /backup` (admins: the whole database).
+
+Pocket Move can copy your floor plans out and bring them in (`GET /pocket/portable`; link scopes `move:export` / `move:import`). The import answers its counts under `added` and at the top level.
