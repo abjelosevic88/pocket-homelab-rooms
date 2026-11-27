@@ -211,10 +211,12 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		Description: "Plan your rooms to scale: draw a flat or a house room by room (or start from a ready-made plan, a picture of a floor plan read by AI, or a Sweet Home 3D file), place doors, windows and furniture by its real size, try different layouts side by side, see it in 3D, and check clearances — space to walk, doors that can open. \"Will it fit?\" works out whether a sofa gets through your doors, hallways, corners, stairs and lift. Areas, walls to paint, floor to order and a shopping list add themselves up. Ties plans to Pocket Home (appliances and plants on the plan), Pocket Inventory and Pocket Wishlist (furniture you own and want), Pocket Rentals, Pocket Photos (room photos, tracing over a plan), Pocket Tasks, Notes, Files, Money and Chat; Pocket AI reads plans and sizes and gives layout tips.",
 		Icon:        "/favicon.svg", Version: Version,
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "ROOMS",
-		Publishes: eventTopics,
-		Offers:    linkOffers,
-		Uses:      append(linkUses(), core.InferenceUse()),
-		Portable:  portable,
+		Publishes:    eventTopics,
+		Offers:       linkOffers,
+		Uses:         append(linkUses(), core.InferenceUse()),
+		Portable:     portable,
+		Category:     "Home",
+		Capabilities: capabilities,
 	}
 	if s.cfg.BaseURL != "" {
 		m.OIDC = &core.OIDCRequest{RedirectURIs: []string{s.oidcCallbackURL()}}

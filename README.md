@@ -86,6 +86,8 @@ Set `CORE_URL` and `CORE_REGISTRATION_KEY` and Rooms joins the box: people sign 
 
 **Nothing depends on another app.** Each app's state is checked per person, and what needs it is shown greyed out with one line saying why, never hidden.
 
+Rooms also tells Pocket Core what it can do for the apps that bring the box together, so they find it on their own: Pocket Search finds your plans, rooms and furniture (`!rooms`, `!plan`), Pocket Day shows the checklist items you ticked off or that are due on a day, and Pocket Hub shows what is left to do on your plans and keeps a quick line as a piece of furniture to buy (a link in the line becomes its shop page; you put in its size later). Each is one route with its own scope (`pocket:search`, `pocket:day`, `pocket:widget`, `pocket:capture`), per person, switched on in Core like any other link.
+
 Other apps use your plans through `rooms:read` and `rooms:write`: Pocket AI answers “how big is the bedroom?”, “what is still to buy?” and “does a 228 cm sofa get through my door?”; Pocket Search finds rooms, plans and furniture; Pocket Day shows checklist items. Events on the bus — `rooms.plan_created`, `rooms.layout_saved`, `rooms.piece_added`, `rooms.piece_bought`, `rooms.todo_done` — start flows in Pocket Flows. The AI (reading plans and sizes, tips for a layout) can also be your own OpenAI-compatible key.
 
 ## Develop

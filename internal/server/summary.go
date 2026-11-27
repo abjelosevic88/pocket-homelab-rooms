@@ -366,6 +366,61 @@ func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"plans": list, "wanted": wl, "open_todos": len(todos), "todos": todos})
 }
 
+// found is one thing a search turned up: a plan, a room on one of its
+// layouts, or a piece of furniture.
+type found struct {
+	kind     string
+	id       any    // a plan's or a piece's number, a room's id in its drawing
+	key      string // the id where the three are mixed: "plan:3", "room:4:r2" (layout, room), "piece:7"
+	title    string
+	subtitle string
+	line     string
+	path     string
+	about    string // the subtitle in plain words, for Pocket Search
+	more     string // what else was searched: a plan's notes, a piece's shop and notes
+	changed  string
+}
+
+// find is the search behind GET /search and Pocket Search: plans by name,
+// address and notes, rooms by name on any layout, furniture by name, notes,
+// shop and shape. Plans come first, each followed by its rooms, then the
+// furniture (at most limit pieces). What could not be read is left out; the
+// first such error comes back with the rest.
+func (s *Server) find(ctx context.Context, uid int64, q string, limit int) ([]found, error) {
+	q = strings.ToLower(strings.TrimSpace(q))
+	out := []found{}
+	st := s.settingsOf(ctx, uid)
+	plans, err := s.store.ListPlans(ctx, uid, false)
+	for _, p := range plans {
+		if strings.Contains(strings.ToLower(p.Name+" "+p.Address+" "+p.Notes), q) {
+			out = append(out, found{kind: "plan", id: p.ID, key: "plan:" + itoa(p.ID), title: p.Name, subtitle: firstNonEmpty(p.Address, p.Kind),
+				line: firstNonEmpty(p.Address, areaText(p.AreaCm2, st.Units)), path: fmt.Sprintf("/plans/%d", p.ID),
+				about: firstNonEmpty(p.Address, planKindWords[p.Kind]), more: p.Notes, changed: p.UpdatedAt})
+		}
+		layouts, _ := s.store.ListLayouts(ctx, uid, p.ID, true)
+		for _, l := range layouts {
+			d, _ := store.ParseDrawing(l.Data)
+			for _, rm := range d.Rooms {
+				if strings.Contains(strings.ToLower(rm.Name), q) {
+					sub := fmt.Sprintf("%s · %s · %s", p.Name, l.Name, areaText(rm.Area(), st.Units))
+					out = append(out, found{kind: "room", id: rm.ID, key: fmt.Sprintf("room:%d:%s", l.ID, rm.ID), title: rm.Name, subtitle: sub, line: sub,
+						path: fmt.Sprintf("/plans/%d?layout=%d", p.ID, l.ID), about: sub, changed: l.UpdatedAt})
+				}
+			}
+		}
+	}
+	pieces, perr := s.store.ListPieces(ctx, uid, store.PieceFilter{Q: q, Limit: limit})
+	for _, p := range pieces {
+		sub := sizeText(p.Width, p.Depth, p.Height, st.Units)
+		out = append(out, found{kind: "piece", id: p.ID, key: "piece:" + itoa(p.ID), title: p.Name, subtitle: sub, line: sub, path: fmt.Sprintf("/furniture/%d", p.ID),
+			about: joinNonEmpty(" · ", sub, pieceStateWords[p.Status]), more: joinNonEmpty(" · ", p.Shop, p.Notes), changed: p.UpdatedAt})
+	}
+	if err == nil {
+		err = perr
+	}
+	return out, err
+}
+
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	uid := actorID(ctx)
@@ -379,30 +434,9 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"results": out})
 		return
 	}
-	st := s.settingsOf(ctx, uid)
-	plans, _ := s.store.ListPlans(ctx, uid, false)
-	for _, p := range plans {
-		if strings.Contains(strings.ToLower(p.Name+" "+p.Address+" "+p.Notes), q) {
-			path := fmt.Sprintf("/plans/%d", p.ID)
-			out = append(out, map[string]any{"kind": "plan", "id": p.ID, "title": p.Name, "name": p.Name, "subtitle": firstNonEmpty(p.Address, p.Kind), "line": firstNonEmpty(p.Address, areaText(p.AreaCm2, st.Units)), "url": s.link(path), "path": path})
-		}
-		layouts, _ := s.store.ListLayouts(ctx, uid, p.ID, true)
-		for _, l := range layouts {
-			d, _ := store.ParseDrawing(l.Data)
-			for _, rm := range d.Rooms {
-				if strings.Contains(strings.ToLower(rm.Name), q) {
-					sub := fmt.Sprintf("%s · %s · %s", p.Name, l.Name, areaText(rm.Area(), st.Units))
-					path := fmt.Sprintf("/plans/%d?layout=%d", p.ID, l.ID)
-					out = append(out, map[string]any{"kind": "room", "id": rm.ID, "title": rm.Name, "name": rm.Name, "subtitle": sub, "line": sub, "url": s.link(path), "path": path})
-				}
-			}
-		}
-	}
-	pieces, _ := s.store.ListPieces(ctx, uid, store.PieceFilter{Q: q, Limit: limit})
-	for _, p := range pieces {
-		sub := sizeText(p.Width, p.Depth, p.Height, st.Units)
-		path := fmt.Sprintf("/furniture/%d", p.ID)
-		out = append(out, map[string]any{"kind": "piece", "id": p.ID, "title": p.Name, "name": p.Name, "subtitle": sub, "line": sub, "url": s.link(path), "path": path})
+	rows, _ := s.find(ctx, uid, q, limit)
+	for _, f := range rows {
+		out = append(out, map[string]any{"kind": f.kind, "id": f.id, "title": f.title, "name": f.title, "subtitle": f.subtitle, "line": f.line, "url": s.link(f.path), "path": f.path})
 	}
 	if len(out) > limit {
 		out = out[:limit]

@@ -51,6 +51,25 @@ func (s *Store) ListPlans(ctx context.Context, uid int64, archived bool) ([]Plan
 	return out, rows.Err()
 }
 
+// RecentPlans returns the few plans a person changed last.
+func (s *Store) RecentPlans(ctx context.Context, uid int64, limit int) ([]Plan, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT `+planCols+` FROM plans WHERE user_id = ? AND archived = 0 ORDER BY updated_at DESC, id DESC LIMIT ?`, uid, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := []Plan{}
+	for rows.Next() {
+		p, err := scanPlan(rows)
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out = append(out, *p)
+	}
+	rows.Close()
+	return out, rows.Err()
+}
+
 // GetPlan returns one of a person's plans.
 func (s *Store) GetPlan(ctx context.Context, uid, id int64) (*Plan, error) {
 	p, err := scanPlan(s.DB.QueryRowContext(ctx, `SELECT `+planCols+` FROM plans WHERE user_id = ? AND id = ?`, uid, id))

@@ -99,6 +99,7 @@ type TodoFilter struct {
 	Open    bool
 	DueFrom string
 	DueTo   string
+	Limit   int // 0 = all of them
 }
 
 // ListTodos returns a person's checklist items.
@@ -122,7 +123,12 @@ func (s *Store) ListTodos(ctx context.Context, uid int64, f TodoFilter) ([]Todo,
 		q += ` AND t.due <> '' AND t.due <= ?`
 		args = append(args, f.DueTo)
 	}
-	rows, err := s.DB.QueryContext(ctx, q+` ORDER BY t.done, CASE WHEN t.due = '' THEN 1 ELSE 0 END, t.due, t.sort, t.id`, args...)
+	q += ` ORDER BY t.done, CASE WHEN t.due = '' THEN 1 ELSE 0 END, t.due, t.sort, t.id`
+	if f.Limit > 0 {
+		q += ` LIMIT ?`
+		args = append(args, f.Limit)
+	}
+	rows, err := s.DB.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -172,6 +178,15 @@ func (s *Store) OpenTodos(ctx context.Context, uid, planID int64) int {
 	var n int
 	_ = s.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM todos WHERE user_id = ? AND plan_id = ? AND done = 0`, uid, planID).Scan(&n)
 	return n
+}
+
+// OpenTodoCounts counts a person's open checklist items on the plans that
+// are not put away: how many, on how many plans, and how many were due
+// before today.
+func (s *Store) OpenTodoCounts(ctx context.Context, uid int64, today string) (open, plans, late int, err error) {
+	err = s.DB.QueryRowContext(ctx, `SELECT COUNT(1), COUNT(DISTINCT t.plan_id), COALESCE(SUM(t.due <> '' AND t.due < ?), 0)
+		FROM todos t JOIN plans p ON p.id = t.plan_id WHERE t.user_id = ? AND t.done = 0 AND p.archived = 0`, today, uid).Scan(&open, &plans, &late)
+	return
 }
 
 // ---- plan photos ----

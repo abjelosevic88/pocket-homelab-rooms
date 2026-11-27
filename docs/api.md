@@ -76,6 +76,17 @@ x runs to the right and y down, in centimetres. A room's points are its inside o
 
 With a `pcx_` token from Pocket Core another app reaches only: `rooms:read` — `GET summary, home, search, plans, pieces, todos, day/{date}`, `GET plans/{id}, pieces/{id}, layouts/{id}`, `GET plans/{id}/summary|routes`, `POST fit`; `rooms:write` — `POST pieces, plans, todos, plans/{id}/todos`, `PUT/DELETE` of the pieces and checklist items it added itself.
 
+### What Pocket Search, Day and Hub ask
+
+Rooms answers the four routes every Pocket app can offer (the capability contract of Pocket Core), in the same shape as the other apps. Each has its own link scope, which opens that one route and nothing else; `rooms:read` and `rooms:write` do not open them. You can call them with your own session or token too.
+
+| Call | Scope | What it is |
+|---|---|---|
+| `GET /pocket/search?q=&limit=` | `pocket:search` | What `GET /search` finds, names that have the words first: `{"items": [{"id": "plan:3" \| "room:LAYOUT:ROOM" \| "piece:7", "title", "snippet", "kind": "plan\|room\|piece", "date", "url", "score"}]}`. A search without a letter or a digit finds nothing |
+| `GET /pocket/day/YYYY-MM-DD` (`?tz=Europe/Sarajevo`) | `pocket:day` | The checklist items ticked off that day (with the time) and the ones due that day and still open: `{"date", "summary": "2 checklist items done, 1 still due", "items": [{"id", "time", "title", "sub": the plan, "kind": "done\|due", "done", "url"}], "metrics"}` |
+| `GET /pocket/widget` | `pocket:widget` | What is left to do on your plans, late and soonest first, at most eight: `{"line": "3 things to do for Our flat, 1 late", "metrics", "items": [{"id": "todo:7", "title", "detail": "Our flat · due tomorrow", "url"}], "url"}`. With nothing to do, the plans you changed last; without a plan, nothing |
+| `POST /pocket/capture` | `pocket:capture` | `{"request_id", "kind": "piece", "title", "text"}` → `201 {"id": "piece:7", "title", "url": "/furniture/7"}`. A piece of furniture to buy (status `want`), named by the title or the first line of the text; a web address in it is kept as the shop link (a line that is only an address is named after the shop), the rest goes to the notes. It starts with the size every new piece starts with (100 × 60 × 80 cm) and a note to put in the real one. The same `request_id` again answers the same piece and adds nothing; with other words it answers 400 |
+
 Events on the Core bus: `rooms.plan_created`, `rooms.layout_saved` (at most every few minutes per layout), `rooms.piece_added`, `rooms.piece_bought`, `rooms.todo_done`.
 
 ## Data

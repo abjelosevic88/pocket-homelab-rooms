@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -178,30 +179,44 @@ func (s *Server) applyPiece(ctx context.Context, keys map[string]bool, in pieceI
 
 func (s *Server) handleCreatePiece(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	uid := actorID(ctx)
 	var in pieceIn
 	keys, err := decodeKeys(r, &in)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
 	}
+	p, err := s.addPiece(ctx, actorID(ctx), keys, in)
+	if err != nil {
+		s.userFail(w, err, "piece")
+		return
+	}
+	p.PhotoURL, _ = photoURL(p.PhotoID)
+	writeJSON(w, http.StatusCreated, p)
+}
+
+// addPiece adds a piece for a person and tells the Core bus: what POST
+// /pieces does, and a quick line kept from elsewhere (capabilities.go). A
+// piece without a size starts as 100 × 60 × 80 cm, to be measured later.
+// Hooks run in the transaction that adds it, once it has its id.
+func (s *Server) addPiece(ctx context.Context, uid int64, keys map[string]bool, in pieceIn, hooks ...func(*sql.Tx, *store.Piece) error) (*store.Piece, error) {
 	st := s.settingsOf(ctx, uid)
 	p := &store.Piece{UserID: uid, Type: "box", Category: "living", Width: 100, Depth: 60, Height: 80, Status: "own", Currency: firstNonEmpty(st.Currency, "EUR"), Source: sourceOf(ctx)}
 	if linkApp(ctx) != "" {
 		p.Status = "want"
 	}
 	if err := s.applyPiece(ctx, keys, in, p); err != nil {
-		s.userFail(w, err, "piece")
-		return
+		return nil, err
 	}
-	if err := s.store.CreatePiece(ctx, p); err != nil {
-		s.fail(w, err, "piece")
-		return
+	inTx := make([]func(*sql.Tx) error, 0, len(hooks))
+	for _, hook := range hooks {
+		inTx = append(inTx, func(tx *sql.Tx) error { return hook(tx, p) })
+	}
+	if err := s.store.CreatePiece(ctx, p, inTx...); err != nil {
+		return nil, err
 	}
 	s.publish(ctx, uid, "rooms.piece_added", fmt.Sprintf("piece:%d", p.ID), map[string]any{"piece_id": p.ID, "name": p.Name, "status": p.Status,
 		"width_cm": p.Width, "depth_cm": p.Depth, "height_cm": p.Height, "url": s.link(fmt.Sprintf("/furniture/%d", p.ID))})
-	p.PhotoURL, _ = photoURL(p.PhotoID)
-	writeJSON(w, http.StatusCreated, p)
+	return p, nil
 }
 
 func (s *Server) handleGetPiece(w http.ResponseWriter, r *http.Request) {

@@ -80,9 +80,15 @@ func (s *Store) GetPiece(ctx context.Context, uid, id int64) (*Piece, error) {
 	return p, notFound(err)
 }
 
-// CreatePiece adds a piece.
-func (s *Store) CreatePiece(ctx context.Context, p *Piece) error {
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO pieces (user_id, name, type, category, width, depth, height, color, status, price, currency, url, shop, notes, photo_id,
+// CreatePiece adds a piece. Hooks run in the same transaction, after the
+// piece has its id: when one fails, nothing is added.
+func (s *Store) CreatePiece(ctx context.Context, p *Piece, hooks ...func(*sql.Tx) error) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `INSERT INTO pieces (user_id, name, type, category, width, depth, height, color, status, price, currency, url, shop, notes, photo_id,
 		inventory_id, inventory_name, wish_id, wish_name, money_tx_id, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		p.UserID, p.Name, p.Type, p.Category, p.Width, p.Depth, p.Height, p.Color, p.Status, nullI(p.Price), p.Currency, p.URL, p.Shop, p.Notes, nullI(p.PhotoID),
 		nullI(p.InventoryID), p.InventoryName, nullI(p.WishID), p.WishName, p.MoneyTxID, p.Source)
@@ -90,6 +96,16 @@ func (s *Store) CreatePiece(ctx context.Context, p *Piece) error {
 		return err
 	}
 	p.ID, _ = res.LastInsertId()
+	for _, hook := range hooks {
+		if err := hook(tx); err != nil {
+			p.ID = 0
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		p.ID = 0
+		return err
+	}
 	return nil
 }
 
